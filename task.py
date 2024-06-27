@@ -15,10 +15,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a message with 5 inline buttons attached."""
-    await update.message.reply_text("Бот запущен")
-
 
 async def list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.chat_data['messages']) == 0:
@@ -26,10 +22,22 @@ async def list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         mes_string = []
         for i, item in enumerate(context.chat_data['messages']):
-            print(f'{i} - {item['body']} | Статус: {item['status']}')
             mes_string.append(f'{i + 1} - {item['body']} | Статус: {item['status']}\n')
-        print(mes_string)
         await update.message.reply_text(f'{''.join(mes_string)}')
+
+async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    
+    if len(context.chat_data['messages']) == 0:
+         await update.message.reply_text('Ваш список задач пуст.\nПополнить список - /add')
+    else:
+        mes_string = []
+        for i, item in enumerate(context.chat_data['messages']):
+            mes_string.append(f'{i + 1} - {item['body']} | Статус: {item['status']}\n')
+
+        keyboard = InlineKeyboardMarkup.from_column([InlineKeyboardButton(str(item), callback_data=str(x)) for x, item in enumerate(mes_string)])
+        
+        await update.message.reply_text("Выберите задачу которую хотите выполнить:", reply_markup=keyboard)
+        
 
 
 
@@ -53,23 +61,30 @@ async def add(update: Update, context: CallbackContext) -> None:
     if user_text_data == '/add':
         pass
     else:
-        context.chat_data['messages'].append({'body': update.message.text, 'status': 'Не выполнен'})
-        await update.message.reply_text(f'Задача номер {len(context.chat_data['messages'])} добавлена - {user_text_data}')
+        context.chat_data['messages'].append({'body': update.message.text, 'status': '❌'})
+        await update.message.reply_text(f'Задача номер {len(context.chat_data['messages'])} добавлена - {user_text_data} ✅')
         print('Сохранено')
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Displays info on how to use the bot."""
-    await update.message.reply_text(
-        "Use /start to test this bot. Use /clear to clear the stored data so that you can see "
-        "what happens, if the button data is not available. "
-    )
 
 
 
+async def list_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Parses the CallbackQuery and updates the message text."""
+    query = update.callback_query
+    #await query.answer()
+    if context.chat_data['messages'][int(query.data)]['status'] != '✅':
+        print(f'Данные - {query.data}')
+        context.chat_data['messages'][int(query.data)]['status'] = '✅'
+        await query.edit_message_text(
+            text=f"Вы выполнили задание - {int(query.data) + 1}.",
+        )
+    else:
+        await query.edit_message_text(
+            text=f"Это задане уже выполненно! ❌",
+        )
 
-
-
+    context.drop_callback_data(query)
 
 
 
@@ -89,11 +104,12 @@ def main() -> None:
         .build()
     )
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("clear", clear))
     application.add_handler(CommandHandler("list", list))
+    application.add_handler(CommandHandler("done", done))
     application.add_handler(MessageHandler(filters.TEXT, add))
+    application.add_handler(CallbackQueryHandler(list_button))
+
 
 
     # Run the bot until the user presses Ctrl-C
